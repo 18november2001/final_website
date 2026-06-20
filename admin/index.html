@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin — ACMIP Group</title>
+  <meta name="robots" content="noindex, nofollow" />
+  <link rel="stylesheet" href="../css/styles.css" />
+  <style>
+    body { background: #f0f3f8; }
+  </style>
+</head>
+<body class="admin-body">
+
+<!-- ══════════════════════════════════════
+     LOGIN SCREEN
+══════════════════════════════════════ -->
+<div id="loginScreen" class="admin-login">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="login-logo-name">ACMIP</div>
+      <div class="login-logo-sub">Admin Portal</div>
+    </div>
+    <div class="login-title">Sign In</div>
+    <div class="login-subtitle">Access the ACMIP Group admin dashboard</div>
+    <div class="login-error" id="loginError"></div>
+    <form id="loginForm">
+      <div class="form-group">
+        <label for="adminEmail">Email Address</label>
+        <input type="email" id="adminEmail" placeholder="admin@acmip.co.za" required />
+      </div>
+      <div class="form-group">
+        <label for="adminPass">Password</label>
+        <input type="password" id="adminPass" placeholder="••••••••" required />
+      </div>
+      <button type="submit" class="btn btn-primary" id="loginBtn" style="width:100%;justify-content:center;margin-top:0.5rem;">
+        <span id="loginText">Sign In →</span>
+      </button>
+    </form>
+    <p style="text-align:center;font-size:0.75rem;color:var(--grey);margin-top:1.5rem;">
+      ACMIP Group &nbsp;|&nbsp; Secure Admin Access
+    </p>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     DASHBOARD SCREEN
+══════════════════════════════════════ -->
+<div id="dashboardScreen" style="display:none;">
+  <div class="admin-layout">
+
+    <!-- SIDEBAR -->
+    <aside class="admin-sidebar">
+      <div class="sidebar-logo">
+        <div class="sidebar-logo-name">ACMIP</div>
+        <div class="sidebar-logo-sub">Admin Dashboard</div>
+      </div>
+      <div class="sidebar-admin-badge">
+        <div class="sidebar-admin-name" id="sidebarName">Admin</div>
+        <div class="sidebar-admin-role">Administrator</div>
+      </div>
+      <nav class="sidebar-nav">
+        <a class="sidebar-nav-item active" onclick="showView('submissions')">
+          <span class="sidebar-nav-icon">📨</span>
+          Submissions
+          <span class="sidebar-new-badge" id="newBadgeSidebar" style="display:none;">0</span>
+        </a>
+        <a class="sidebar-nav-item" href="../index.html" target="_blank">
+          <span class="sidebar-nav-icon">🌐</span>
+          View Website
+        </a>
+      </nav>
+      <div class="sidebar-logout">
+        <button onclick="logout()">Sign Out</button>
+      </div>
+    </aside>
+
+    <!-- MAIN CONTENT -->
+    <main class="admin-main">
+
+      <!-- TOP BAR -->
+      <div class="admin-topbar">
+        <div>
+          <h1>Submissions</h1>
+          <p>All website enquiries from the contact form</p>
+        </div>
+        <button onclick="loadSubmissions()" class="btn btn-outline-navy" style="font-size:0.78rem;padding:0.5rem 1rem;">
+          ↻ Refresh
+        </button>
+      </div>
+
+      <!-- STATS ROW -->
+      <div class="stats-row">
+        <div class="stat-card red-top">
+          <div class="stat-num" id="statNew">—</div>
+          <div class="stat-label">New Enquiries</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-num" id="statRead">—</div>
+          <div class="stat-label">Read</div>
+        </div>
+        <div class="stat-card green-top">
+          <div class="stat-num" id="statResponded">—</div>
+          <div class="stat-label">Responded</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-num" id="statTotal">—</div>
+          <div class="stat-label">Total</div>
+        </div>
+      </div>
+
+      <!-- FILTER BAR -->
+      <div class="filter-bar">
+        <button class="filter-btn active" onclick="filterSubmissions('all', this)">All</button>
+        <button class="filter-btn red-filter" onclick="filterSubmissions('new', this)">🔴 New</button>
+        <button class="filter-btn" onclick="filterSubmissions('read', this)">Read</button>
+        <button class="filter-btn" onclick="filterSubmissions('responded', this)">✅ Responded</button>
+      </div>
+
+      <!-- TABLE -->
+      <div class="submissions-table">
+        <div class="table-header">
+          <span>Name</span>
+          <span>Email</span>
+          <span>Organisation</span>
+          <span>Service</span>
+          <span>Date</span>
+          <span>Status</span>
+        </div>
+        <div id="submissionsBody">
+          <div class="loading-spinner">Loading submissions…</div>
+        </div>
+      </div>
+
+    </main>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     SUBMISSION DETAIL MODAL
+══════════════════════════════════════ -->
+<div class="modal-overlay" id="modalOverlay" onclick="closeModalOnBg(event)">
+  <div class="modal" id="modal">
+    <div class="modal-header">
+      <h3 id="modalTitle">Enquiry Details</h3>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+    <div class="modal-actions" id="modalActions"></div>
+  </div>
+</div>
+
+<script>
+// ── CONFIG ──
+const API = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+  ? 'http://localhost:5000/api'
+  : 'https://acmip-backend.vercel.app/api';
+
+let token = localStorage.getItem('acmip_admin_token');
+let allSubmissions = [];
+let currentFilter = 'all';
+let currentSub = null;
+
+// ── INIT ──
+if (token) showDashboard();
+
+// ── LOGIN ──
+document.getElementById('loginForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById('loginBtn');
+  const txt = document.getElementById('loginText');
+  const err = document.getElementById('loginError');
+  err.style.display = 'none';
+  btn.classList.add('btn-loading');
+  txt.innerHTML = '<span class="spinner"></span> Signing in…';
+
+  try {
+    const res = await fetch(`${API}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: document.getElementById('adminEmail').value,
+        password: document.getElementById('adminPass').value
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Login failed.');
+
+    token = data.token;
+    localStorage.setItem('acmip_admin_token', token);
+    document.getElementById('sidebarName').textContent = data.name || 'Admin';
+    showDashboard();
+  } catch (err2) {
+    err.textContent = err2.message;
+    err.style.display = 'block';
+    btn.classList.remove('btn-loading');
+    txt.textContent = 'Sign In →';
+  }
+});
+
+function showDashboard() {
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('dashboardScreen').style.display = 'block';
+  loadSubmissions();
+}
+
+function logout() {
+  localStorage.removeItem('acmip_admin_token');
+  token = null;
+  document.getElementById('dashboardScreen').style.display = 'none';
+  document.getElementById('loginScreen').style.display = 'flex';
+}
+
+// ── LOAD SUBMISSIONS ──
+async function loadSubmissions() {
+  document.getElementById('submissionsBody').innerHTML = '<div class="loading-spinner">Loading…</div>';
+  try {
+    const res = await fetch(`${API}/submissions`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (res.status === 401) { logout(); return; }
+    const data = await res.json();
+    allSubmissions = data.submissions || [];
+    updateStats(allSubmissions);
+    renderSubmissions(filterList(allSubmissions));
+  } catch {
+    document.getElementById('submissionsBody').innerHTML = '<div class="empty-state"><div class="empty-icon">⚠️</div><p>Failed to load. Check your connection or backend.</p></div>';
+  }
+}
+
+function updateStats(list) {
+  const newC = list.filter(s => s.status === 'new').length;
+  const readC = list.filter(s => s.status === 'read').length;
+  const respC = list.filter(s => s.status === 'responded').length;
+  document.getElementById('statNew').textContent = newC;
+  document.getElementById('statRead').textContent = readC;
+  document.getElementById('statResponded').textContent = respC;
+  document.getElementById('statTotal').textContent = list.length;
+  const badge = document.getElementById('newBadgeSidebar');
+  badge.textContent = newC;
+  badge.style.display = newC > 0 ? 'inline-block' : 'none';
+}
+
+function filterList(list) {
+  if (currentFilter === 'all') return list;
+  return list.filter(s => s.status === currentFilter);
+}
+
+function filterSubmissions(f, btn) {
+  currentFilter = f;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderSubmissions(filterList(allSubmissions));
+}
+
+function renderSubmissions(list) {
+  const body = document.getElementById('submissionsBody');
+  if (!list.length) {
+    body.innerHTML = `<div class="empty-state"><div class="empty-icon">📭</div><p>No ${currentFilter === 'all' ? '' : currentFilter + ' '}submissions found.</p></div>`;
+    return;
+  }
+  body.innerHTML = list.map(s => `
+    <div class="submission-row ${s.status === 'new' ? 'is-new' : ''}" onclick="openModal('${s._id}')">
+      <div>
+        <div class="sub-name">${esc(s.firstName)} ${esc(s.lastName)}</div>
+        <div class="sub-email">${esc(s.email)}</div>
+      </div>
+      <div class="sub-email">${esc(s.email)}</div>
+      <div class="sub-org">${esc(s.organisation) || '<span style="color:var(--grey)">—</span>'}</div>
+      <div class="sub-service" title="${esc(s.service)}">${truncate(s.service, 28)}</div>
+      <div class="sub-date">${formatDate(s.createdAt)}</div>
+      <div class="sub-status"><span class="status-badge status-${s.status}">${s.status}</span></div>
+    </div>
+  `).join('');
+}
+
+// ── MODAL ──
+function openModal(id) {
+  currentSub = allSubmissions.find(s => s._id === id);
+  if (!currentSub) return;
+
+  document.getElementById('modalTitle').textContent = `${currentSub.firstName} ${currentSub.lastName}`;
+  document.getElementById('modalBody').innerHTML = `
+    <div class="modal-field"><div class="modal-label">Full Name</div><div class="modal-value">${esc(currentSub.firstName)} ${esc(currentSub.lastName)}</div></div>
+    <div class="modal-field"><div class="modal-label">Email</div><div class="modal-value"><a href="mailto:${esc(currentSub.email)}" style="color:var(--red)">${esc(currentSub.email)}</a></div></div>
+    ${currentSub.phone ? `<div class="modal-field"><div class="modal-label">Phone</div><div class="modal-value">${esc(currentSub.phone)}</div></div>` : ''}
+    ${currentSub.organisation ? `<div class="modal-field"><div class="modal-label">Organisation</div><div class="modal-value">${esc(currentSub.organisation)}</div></div>` : ''}
+    <div class="modal-field"><div class="modal-label">Service of Interest</div><div class="modal-value">${esc(currentSub.service) || 'General Enquiry'}</div></div>
+    ${currentSub.country ? `<div class="modal-field"><div class="modal-label">Country / Region</div><div class="modal-value">${esc(currentSub.country)}</div></div>` : ''}
+    <div class="modal-field"><div class="modal-label">Received</div><div class="modal-value">${new Date(currentSub.createdAt).toLocaleString('en-ZA', {timeZone:'Africa/Johannesburg'})} SAST</div></div>
+    <div class="modal-field"><div class="modal-label">Status</div><div class="modal-value"><span class="status-badge status-${currentSub.status}">${currentSub.status}</span></div></div>
+    <div class="modal-field"><div class="modal-label">Message</div><div class="modal-message">${esc(currentSub.message)}</div></div>
+  `;
+
+  const actions = document.getElementById('modalActions');
+  const replySubject = encodeURIComponent(`Re: Your ACMIP Group Enquiry`);
+  actions.innerHTML = `
+    <a href="mailto:${esc(currentSub.email)}?subject=${replySubject}" class="modal-actions btn-reply">✉️ Reply via Email</a>
+    ${currentSub.status !== 'read' ? `<button onclick="updateStatus('${id}','read')" class="modal-actions btn-mark-read">Mark as Read</button>` : ''}
+    ${currentSub.status !== 'responded' ? `<button onclick="updateStatus('${id}','responded')" class="modal-actions btn-mark-responded">✅ Mark Responded</button>` : ''}
+    <button onclick="deleteSubmission('${id}')" class="modal-actions btn-delete">🗑 Delete</button>
+  `;
+
+  document.getElementById('modalOverlay').classList.add('open');
+
+  // Auto-mark as read if new
+  if (currentSub.status === 'new') updateStatus(id, 'read', true);
+}
+
+function closeModal() {
+  document.getElementById('modalOverlay').classList.remove('open');
+  currentSub = null;
+}
+function closeModalOnBg(e) {
+  if (e.target === document.getElementById('modalOverlay')) closeModal();
+}
+
+async function updateStatus(id, status, silent = false) {
+  try {
+    const res = await fetch(`${API}/submissions/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ status })
+    });
+    if (!res.ok) return;
+    const idx = allSubmissions.findIndex(s => s._id === id);
+    if (idx > -1) allSubmissions[idx].status = status;
+    updateStats(allSubmissions);
+    renderSubmissions(filterList(allSubmissions));
+    if (!silent) closeModal();
+  } catch {}
+}
+
+async function deleteSubmission(id) {
+  if (!confirm('Delete this submission? This cannot be undone.')) return;
+  try {
+    await fetch(`${API}/submissions/${id}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    allSubmissions = allSubmissions.filter(s => s._id !== id);
+    updateStats(allSubmissions);
+    renderSubmissions(filterList(allSubmissions));
+    closeModal();
+  } catch {}
+}
+
+// ── HELPERS ──
+function esc(str) {
+  if (!str) return '';
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function truncate(str, n) {
+  if (!str) return '—';
+  return str.length > n ? str.slice(0, n) + '…' : str;
+}
+function formatDate(d) {
+  return new Date(d).toLocaleDateString('en-ZA', { day:'2-digit', month:'short', year:'numeric' });
+}
+function showView() {} // placeholder for future nav items
+</script>
+</body>
+</html>
